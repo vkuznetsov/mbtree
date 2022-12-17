@@ -12,7 +12,7 @@ use libc::c_void;
 
 const MIN_SIZE: usize = 65536;
 
-pub struct Mapping<T: Sized> {
+pub struct Mapping<T: Sized + Default> {
     _type_marker: PhantomData<T>,
     size: usize,
     file: File,
@@ -27,7 +27,7 @@ pub enum Error<'a> {
     IndexOutOfBounds,
 }
 
-impl<T> Mapping<T> {
+impl<T: Sized + Default> Mapping<T> {
     pub fn new(filepath: &Path) -> Result<Self, Error> {
         let mut file = OpenOptions::new()
             .read(true)
@@ -72,9 +72,10 @@ impl<T> Mapping<T> {
         Ok(())
     }
 
-    pub fn read_at(&self, mut value: T, idx: usize) -> Result<T, Error> {
+    pub fn read_at(&self, idx: usize) -> Result<T, Error> {
         let vsize = mem::size_of::<T>();
         let p = idx * vsize;
+        let mut value: T = T::default();
 
         dbg!(p);
 
@@ -105,7 +106,7 @@ impl<T> Mapping<T> {
     }
 }
 
-impl<T> Drop for Mapping<T> {
+impl<T: Sized + Default> Drop for Mapping<T> {
     fn drop(&mut self) {
         munmap(self.mm, self.size).unwrap();
     }
@@ -168,6 +169,14 @@ mod test {
         v: i32,
     }
 
+    impl Default for TestPage {
+        fn default() -> Self {
+            Self {
+                v: Default::default(),
+            }
+        }
+    }
+
     struct TestFile {
         path_str: String,
     }
@@ -194,32 +203,28 @@ mod test {
         }
 
         {
-            let mapping = Mapping::new(test_file_path).expect("can't create mapping");
+            let mapping: Mapping<TestPage> =
+                Mapping::new(test_file_path).expect("can't create mapping");
 
-            let p = mapping
-                .read_at(TestPage { v: 0 }, idx1)
-                .expect("can't read from mapping");
+            let p = mapping.read_at(idx1).expect("can't read from mapping");
             assert_eq!(p.v, v1);
 
-            let p = mapping
-                .read_at(TestPage { v: 0 }, idx2)
-                .expect("can't read from mapping");
+            let p = mapping.read_at(idx2).expect("can't read from mapping");
             assert_eq!(p.v, v2);
 
-            let p = mapping
-                .read_at(TestPage { v: 0 }, idx3)
-                .expect("can't read from mapping");
+            let p = mapping.read_at(idx3).expect("can't read from mapping");
             assert_eq!(p.v, v3);
         }
     }
 
     #[test]
     fn mmap_test_index_of_bounds() {
-        let mapping = Mapping::new(TestFile::new().path()).expect("can't create mapping");
+        let mapping: Mapping<TestPage> =
+            Mapping::new(TestFile::new().path()).expect("can't create mapping");
 
         let p = TestPage { v: 0 };
         assert!(matches!(
-            mapping.read_at(p, MIN_SIZE / mem::size_of::<TestPage>()),
+            mapping.read_at(MIN_SIZE / mem::size_of::<TestPage>()),
             Err(Error::IndexOutOfBounds)
         ));
     }

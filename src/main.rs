@@ -1,16 +1,16 @@
-use std::{path::Path, thread::sleep, time::Duration};
+use std::{mem, path::Path, thread::sleep, time::Duration};
 
 use crate::mm_io::Mapping;
 
 mod mm_io;
 
 #[derive(Debug, Clone)]
-struct Dummy8192Page {
+struct Dummy8KbPage {
     id: i32,
     items: [i32; 2047],
 }
 
-impl Default for Dummy8192Page {
+impl Default for Dummy8KbPage {
     fn default() -> Self {
         Self {
             id: Default::default(),
@@ -20,8 +20,11 @@ impl Default for Dummy8192Page {
 }
 
 fn main() {
+    assert_eq!(mem::size_of::<Dummy8KbPage>(), 8192);
+
     let mut mapping = Mapping::new(Path::new("database.db")).unwrap();
-    let p = Dummy8192Page {
+
+    let p = Dummy8KbPage {
         id: 1,
         items: [0; 2047],
     };
@@ -34,8 +37,7 @@ fn main() {
         sleep(Duration::from_secs(1));
     }
 
-    let p1 = Dummy8192Page::default();
-    let p1 = mapping.read_at(p1, idx).unwrap();
+    let p1 = mapping.read_at(idx).unwrap();
 
     println!("p1={{id={}, items_size={}}}", p1.id, p1.items.len());
 }
