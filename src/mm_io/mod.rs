@@ -94,12 +94,12 @@ impl<T: Sized + Default> Mapping<T> {
 
     fn maybe_enlarge(&mut self, desired_size: usize) -> Result<(), Error<'static>> {
         if self.size < desired_size {
-            let size = next_size(desired_size, mem::size_of::<T>());
+            let new_size = next_size(desired_size, mem::size_of::<T>());
 
             munmap(self.mm, self.size)?;
-            enlarge_file(&mut self.file, size)?;
-            self.mm = mmap(&self.file, size)?;
-            self.size = size;
+            enlarge_file(&mut self.file, new_size)?;
+            self.mm = mmap(&self.file, new_size)?;
+            self.size = new_size;
         }
 
         Ok(())
