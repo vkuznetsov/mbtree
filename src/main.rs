@@ -1,4 +1,4 @@
-use std::{mem, path::Path, thread::sleep, time::Duration};
+use std::{mem, path::Path};
 
 use crate::mm_io::Mapping;
 
@@ -35,7 +35,6 @@ fn main() {
 
     for i in 0..100 {
         mapping.insert_at(&p, i * 3800).unwrap();
-        sleep(Duration::from_secs(1));
     }
 
     let p1 = mapping.read_at(idx).unwrap();

@@ -222,7 +222,6 @@ mod test {
         let mapping: Mapping<TestPage> =
             Mapping::new(TestFile::new().path()).expect("can't create mapping");
 
-        let p = TestPage { v: 0 };
         assert!(matches!(
             mapping.read_at(MIN_SIZE / mem::size_of::<TestPage>()),
             Err(Error::IndexOutOfBounds)

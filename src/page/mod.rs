@@ -3,11 +3,13 @@ use std::{marker::PhantomData, mem, ptr};
 type Offset = u16;
 
 const PAGE_SIZE: usize = 8192;
-const PAGE_HEADER_SIZE: usize = mem::size_of::<Offset>() * 2;
+const OFFSET_SIZE: usize = mem::size_of::<Offset>();
+const PAGE_HEADER_SIZE: usize = OFFSET_SIZE * 2;
 const DATA_SIZE: usize = PAGE_SIZE - PAGE_HEADER_SIZE;
 const MAX_OFFSET: Offset = PAGE_SIZE as Offset;
+const MIN_OFFSET: Offset = PAGE_HEADER_SIZE as Offset;
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum Error {
     NotEnoughSpace,
 }
@@ -30,32 +32,38 @@ impl<T: Ord> Default for Page<T> {
             data: [0; PAGE_SIZE],
         };
 
-        page.mut_header().last_element = MAX_OFFSET;
+        let hdr = page.mut_header();
+        hdr.last_element = MAX_OFFSET;
+        hdr.last_ref = MIN_OFFSET - 1;
+
         page
     }
 }
 
 impl<T: Ord> Page<T> {
-    pub fn add(&mut self, item: T) -> Result<(), Error> {
+    pub fn add(&mut self, item: T) -> Result<usize, Error> {
         let item_size = mem::size_of_val(&item);
         let hdr = self.mut_header();
 
-        if item_size > (hdr.last_element - hdr.last_ref) as usize {
+        // We need a place for new item and for new element of element_pointers
+        if item_size + OFFSET_SIZE > (hdr.last_element - hdr.last_ref) as usize {
             return Err(Error::NotEnoughSpace);
         }
 
-        // Как посчитать индекс в element_pointers?
-        let idx = 12;
+        let idx = (hdr.last_ref - (MIN_OFFSET - 1)) as usize;
 
         hdr.last_element -= item_size as Offset;
+        hdr.last_ref += 1;
         hdr.element_pointers[idx] = hdr.last_element;
 
+        let offset = hdr.last_element as usize;
+
         unsafe {
-            let addr = self.data.as_ptr().add(PAGE_SIZE).sub(item_size);
+            let addr = self.data.as_ptr().add(offset);
             ptr::write(addr as *mut T, item);
         };
 
-        Ok(())
+        Ok(idx)
     }
 
     pub fn get(&self, idx: usize) -> &T {
@@ -76,7 +84,7 @@ impl<T: Ord> Page<T> {
 mod test {
     use std::mem;
 
-    use super::{Page, PAGE_SIZE};
+    use super::{Error, Page, DATA_SIZE, PAGE_SIZE};
 
     #[test]
     fn size_test() {
@@ -86,7 +94,27 @@ mod test {
     #[test]
     fn add_test() {
         let mut page: Page<String> = Page::default();
-        page.add("Hello!".to_owned()).unwrap();
-        assert_eq!(page.get(12), "Hello!");
+
+        let idx0 = page.add("Hello".to_owned()).unwrap();
+        assert_eq!(idx0, 0);
+        assert_eq!(page.get(idx0), "Hello");
+
+        let idx1 = page.add("world!".to_owned()).unwrap();
+        assert_eq!(idx1, 1);
+        assert_eq!(page.get(idx1), "world!");
+    }
+
+    #[test]
+    fn add_overflow_test() {
+        const ITEM_SIZE: usize = DATA_SIZE / 2 - mem::size_of::<u16>();
+        let mut page: Page<[u8; ITEM_SIZE]> = Page::default();
+
+        let idx0 = page.add([0; ITEM_SIZE]).unwrap();
+        assert_eq!(idx0, 0);
+
+        let idx1 = page.add([0; ITEM_SIZE]).unwrap();
+        assert_eq!(idx1, 1);
+
+        assert_eq!(page.add([0; ITEM_SIZE]), Err(Error::NotEnoughSpace))
     }
 }
