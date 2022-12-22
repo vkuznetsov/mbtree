@@ -3,6 +3,7 @@ use std::{mem, path::Path, thread::sleep, time::Duration};
 use crate::mm_io::Mapping;
 
 mod mm_io;
+mod page;
 
 #[derive(Debug, Clone)]
 struct Dummy8KbPage {
